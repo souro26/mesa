@@ -3,7 +3,6 @@ import numpy as np
 
 import mesa
 from mesa import Agent
-from mesa.agent import AgentSet
 from mesa.examples.advanced.alliance_formation.agents import AllianceAgent
 from mesa.experimental.meta_agents.meta_agent import (
     create_meta_agent,
@@ -65,7 +64,10 @@ class MultiLevelAllianceModel(mesa.Model):
         """
         agent_0, agent_1 = agents
 
-        new_position = 1 - (max(agent_0.position, agent_1.position) - min(agent_0.position, agent_1.position))
+        new_position = 1 - (
+            max(agent_0.position, agent_1.position)
+            - min(agent_0.position, agent_1.position)
+        )
         potential_utility = (agent_0.power + agent_1.power) * 1.2 * new_position
 
         value_0 = 0.5 * agent_0.power + 0.5 * (potential_utility - agent_1.power)
