@@ -64,11 +64,9 @@ class MultiLevelAllianceModel(mesa.Model):
             tuple: Potential utility, new position, and level.
         """
         agent_0, agent_1 = agents
-        agent_set = AgentSet(agents, random=self.random)
 
-        positions = agent_set.get("position")
-        new_position = 1 - (max(positions) - min(positions))
-        potential_utility = agent_set.agg("power", sum) * 1.2 * new_position
+        new_position = 1 - (max(agent_0.position, agent_1.position) - min(agent_0.position, agent_1.position))
+        potential_utility = (agent_0.power + agent_1.power) * 1.2 * new_position
 
         value_0 = 0.5 * agent_0.power + 0.5 * (potential_utility - agent_1.power)
         value_1 = 0.5 * agent_1.power + 0.5 * (potential_utility - agent_0.power)
