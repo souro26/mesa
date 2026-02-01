@@ -74,7 +74,9 @@ def find_combinations(
     group: AgentSet | list | Iterable,
     size: int | tuple[int, int] = (2, 5),
     evaluation_func: Callable[[tuple[Agent, ...]], float] | None = None,
-    filter_func: Callable[[list[tuple[tuple[Agent, ...], float]]], list[tuple[tuple[Agent, ...], float]]]
+    filter_func: Callable[
+        [list[tuple[tuple[Agent, ...], float]]], list[tuple[tuple[Agent, ...], float]]
+    ]
     | None = None,
 ) -> list[tuple[tuple[Agent, ...], float]]:
     """Find valuable combinations of agents in this set.
@@ -102,7 +104,7 @@ def find_combinations(
         agent_list = group.to_list()
     else:
         agent_list = list(group) if not isinstance(group, list) else group
-    
+
     combinations = []
     # Allow one size or range of sizes to be passed
     size_range = (size, size + 1) if isinstance(size, int) else size
