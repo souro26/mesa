@@ -1,7 +1,9 @@
 """Test Batchrunner."""
 
-import pytest
 import contextlib
+
+import pytest
+
 import mesa
 from mesa.agent import Agent
 from mesa.batchrunner import _make_model_kwargs
