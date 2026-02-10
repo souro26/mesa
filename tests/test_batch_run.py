@@ -12,6 +12,7 @@ from mesa.model import Model
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
+
 def test_make_model_kwargs():  # noqa: D103
     assert _make_model_kwargs({"a": 3, "b": 5}) == [{"a": 3, "b": 5}]
     assert _make_model_kwargs({"a": 3, "b": range(3)}) == [
