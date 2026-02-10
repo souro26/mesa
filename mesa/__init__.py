@@ -5,13 +5,15 @@ Core Objects: Model, and Agent.
 
 import datetime
 import warnings
+
 import mesa.discrete_space as discrete_space
 import mesa.experimental as experimental
 import mesa.space as space
 from mesa.agent import Agent
+from mesa.batchrunner import batch_run as _batch_run
 from mesa.datacollection import DataCollector
 from mesa.model import Model
-from mesa.batchrunner import batch_run as _batch_run
+
 
 def batch_run(*args, **kwargs):
     """Batch run a model with a set of parameter values. (Deprecated)"""  # Add this line
@@ -22,6 +24,7 @@ def batch_run(*args, **kwargs):
         stacklevel=2,
     )
     return _batch_run(*args, **kwargs)
+
 
 __all__ = [
     "Agent",
