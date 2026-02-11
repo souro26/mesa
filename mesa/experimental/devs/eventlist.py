@@ -88,7 +88,7 @@ class SimulationEvent:
         """
         super().__init__()
         if not callable(function):
-            raise Exception()
+            raise TypeError("function must be callable")
 
         self.time = time
         self.priority = priority.value
