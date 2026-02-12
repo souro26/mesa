@@ -195,7 +195,8 @@ class TestScheduleRecurring:
         model.schedule_recurring(record, Schedule(interval=1.0, start=1.0, count=3))
         model.run_for(10)
         assert len(log) == 3
-        
+
+
 # --- schedule validation guards ---
 class TestScheduleValidation:
     def test_rejects_nonpositive_fixed_interval(self):
@@ -222,4 +223,3 @@ class TestScheduleValidation:
 
         with pytest.raises(ValueError):
             model.schedule_recurring(lambda: None, schedule)
-
