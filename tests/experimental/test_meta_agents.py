@@ -337,6 +337,7 @@ def test_find_combinations_without_evaluation_func(setup_agents):
     result = find_combinations(model, model.agents, size=2, evaluation_func=None)
     assert result == []  # No combinations when no evaluation function
 
+
 class TestMetaAgentSelector:
     """Tests covering selector behavior, fallback logic, and failure modes."""
 
