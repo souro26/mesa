@@ -230,7 +230,6 @@ class EventGenerator:
             return self.schedule.interval(self.model)
         return self.schedule.interval
 
-
     def _should_stop(self, next_time: float) -> bool:
         """Check if the generator should stop before scheduling the next event."""
         return (
