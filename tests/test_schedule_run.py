@@ -212,3 +212,88 @@ class TestScheduleValidation:
 
         with pytest.raises(ValueError):
             Schedule(interval=1.0, count=-5)
+            
+class TestGeneratorLifecycle:
+    """Tests covering EventGenerator lifecycle and restart behavior."""
+
+    def _run_until_exhausted(self, model, gen, expected_count):
+        """Advance model until generator naturally exhausts."""
+        # Advance far enough to guarantee exhaustion
+        # We use a safe upper bound instead of a fixed 5.
+        model.run_for(expected_count * 10)
+        assert gen.execution_count == expected_count
+
+    def test_restart_resets_execution_count(self):
+        """Restarting an exhausted generator should reset execution_count."""
+        model = SimpleModel()
+        log = []
+
+        def record():
+            log.append(model.time)
+
+        gen = model.schedule_recurring(
+            record,
+            Schedule(interval=1.0, start=1.0, count=2),
+        )
+
+        self._run_until_exhausted(model, gen, expected_count=2)
+        assert len(log) == 2
+        assert not gen.is_active
+
+        # Restart
+        gen.start()
+
+        # Run again sufficiently long
+        model.run_for(10)
+
+        # Should fire again twice
+        assert len(log) == 4
+        assert gen.execution_count == 2
+
+    @pytest.mark.parametrize("interval,count", [(1.0, 2), (0.5, 3), (2.0, 5)])
+    def test_restart_with_various_intervals(self, interval, count):
+        """Restart behavior should be consistent across interval/count combinations."""
+        model = SimpleModel()
+        log = []
+
+        def record():
+            log.append(model.time)
+
+        gen = model.schedule_recurring(
+            record,
+            Schedule(interval=interval, start=1.0, count=count),
+        )
+
+        self._run_until_exhausted(model, gen, expected_count=count)
+        assert len(log) == count
+        assert not gen.is_active
+
+        # Restart
+        gen.start()
+        model.run_for(count * 10)
+
+        assert len(log) == 2 * count
+        assert gen.execution_count == count
+
+    def test_restart_does_not_duplicate_when_active(self):
+        """Calling start() on an active generator should be a no-op."""
+        model = SimpleModel()
+        log = []
+
+        def record():
+            log.append(model.time)
+
+        gen = model.schedule_recurring(
+            record,
+            Schedule(interval=1.0, start=1.0, count=3),
+        )
+
+        model.run_for(1)
+        assert gen.is_active
+
+        # Calling start again should not duplicate scheduling
+        gen.start()
+        model.run_for(10)
+
+        # Should only fire 3 times total
+        assert len(log) == 3

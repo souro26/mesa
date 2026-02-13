@@ -271,10 +271,12 @@ class EventGenerator:
         if self._active:
             return self
 
+        # Reset execution count on restart
+        self._execution_count = 0
+
         if self.schedule.start is not None:
             start_time = self.schedule.start
         else:
-            # Default: start at next interval from now
             start_time = self.model.time + self._get_interval()
 
         self._active = True
@@ -353,7 +355,7 @@ class EventList:
 
     def is_empty(self) -> bool:
         """Return whether the event list is empty."""
-        return len(self) == 0
+        return not any(not e.CANCELED for e in self._events)
 
     def __contains__(self, event: Event) -> bool:  # noqa
         return event in self._events
