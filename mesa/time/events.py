@@ -270,9 +270,28 @@ class EventGenerator:
         """
         if self._active:
             return self
+        if self.schedule.start is not None:
+            start_time = self.schedule.start
+        else:
+            start_time = self.model.time + self._get_interval()
 
-        # Reset execution count on restart
-        self._execution_count = 0
+        self._active = True
+        self._schedule_next(start_time)
+        return self
+    
+    def restart(self) -> EventGenerator:
+        """Restart the event generator.
+
+        Resets the execution count and restarts the generator. If the generator is already active, it does nothing.
+        This method ensures that the generator starts over without duplicating event scheduling.
+
+        Returns:
+            Self for method chaining.
+        """
+        if self._active:
+            return self  # If already active, do nothing.
+
+        self._execution_count = 0  # Reset execution count on restart.
 
         if self.schedule.start is not None:
             start_time = self.schedule.start

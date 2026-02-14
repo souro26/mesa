@@ -241,7 +241,7 @@ class TestGeneratorLifecycle:
         assert not gen.is_active
 
         # Restart
-        gen.start()
+        gen.restart()  # using restart() instead of start()
 
         # Run again sufficiently long
         model.run_for(10)
@@ -269,14 +269,14 @@ class TestGeneratorLifecycle:
         assert not gen.is_active
 
         # Restart
-        gen.start()
+        gen.restart()  # using restart() instead of start()
         model.run_for(count * 10)
 
         assert len(log) == 2 * count
         assert gen.execution_count == count
 
     def test_restart_does_not_duplicate_when_active(self):
-        """Calling start() on an active generator should be a no-op."""
+        """Calling restart() on an active generator should be a no-op."""
         model = SimpleModel()
         log = []
 
@@ -291,8 +291,8 @@ class TestGeneratorLifecycle:
         model.run_for(1)
         assert gen.is_active
 
-        # Calling start again should not duplicate scheduling
-        gen.start()
+        # Calling restart again should not duplicate scheduling
+        gen.restart()  # using restart() instead of start()
         model.run_for(10)
 
         # Should only fire 3 times total
