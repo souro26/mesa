@@ -118,7 +118,7 @@ class Event:
         self.function_args = []
         self.function_kwargs = {}
 
-    def __lt__(self, other):  # noqa
+    def __lt__(self, other):
         """Define a total ordering for events to be used by the heapq."""
         if self.time != other.time:
             return self.time < other.time
