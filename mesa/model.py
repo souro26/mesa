@@ -424,6 +424,11 @@ class Model[A: Agent, S: Scenario](HasObservables):
         Returns:
             The EventGenerator (can be used to stop)
         """
+        if schedule.start is not None and schedule.start < self.time:
+            raise ValueError(
+                f"Cannot start recurring schedule at time {schedule.start}, "
+                f"current time is {self.time}"
+            )
         generator = EventGenerator(self, function, schedule, priority)
         generator.start()
         return generator
