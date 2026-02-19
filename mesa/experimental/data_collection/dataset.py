@@ -134,7 +134,7 @@ class AgentDataSet[A: Agent](BaseDataSet):
         # Returned list is intentionally mutable (same semantics as before).
         self._is_dirty: bool = True
         self._cache: list[dict[str, Any]] | None = None
-        
+
     @property
     def data(self) -> list[dict[str, Any]]:
         """Return the data of the dataset."""
@@ -164,6 +164,7 @@ class AgentDataSet[A: Agent](BaseDataSet):
         super().close()
         self.agents = None
         self._cache = None
+
 
 class ModelDataSet[M: Model](BaseDataSet):
     """Data set for model data.

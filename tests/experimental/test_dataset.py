@@ -440,6 +440,7 @@ def test_table_dataset():
     with pytest.raises(RuntimeError, match="has been closed"):
         _ = dataset.data
 
+
 def test_agent_dataset_dirty_flag():
     """Test manual dirty flag caching behavior in AgentDataSet."""
 
@@ -484,4 +485,3 @@ def test_agent_dataset_dirty_flag():
     dataset.close()
     with pytest.raises(RuntimeError):
         dataset.set_dirty_flag()
-
