@@ -112,7 +112,6 @@ class AgentDataSet[A: Agent](BaseDataSet):
         name: the name of the data set
         agents: the agents to collect data from
         fields: fields to collect
-
     """
 
     def __init__(
@@ -130,19 +129,41 @@ class AgentDataSet[A: Agent](BaseDataSet):
         super().__init__(name, fields=["unique_id", *fields])
         self.agents = agents
 
+        # Dirty-flag optimization (manual invalidation, pull-based only)
+        # Cache stores last computed snapshot.
+        # Returned list is intentionally mutable (same semantics as before).
+        self._is_dirty: bool = True
+        self._cache: list[dict[str, Any]] | None = None
+        
     @property
     def data(self) -> list[dict[str, Any]]:
         """Return the data of the dataset."""
         self._check_closed()
-        return [
-            dict(zip(self._attributes, self._collector(agent))) for agent in self.agents
-        ]
+
+        if self._is_dirty or self._cache is None:
+            self._cache = [
+                dict(zip(self._attributes, self._collector(agent)))
+                for agent in self.agents
+            ]
+            self._is_dirty = False
+
+        return self._cache
+
+    def set_dirty_flag(self) -> None:
+        """Mark the dataset as dirty.
+
+        The next access to `.data` will recompute the snapshot
+        from the underlying agents instead of returning the
+        cached data.
+        """
+        self._check_closed()
+        self._is_dirty = True
 
     def close(self):
         """Close the data set."""
         super().close()
         self.agents = None
-
+        self._cache = None
 
 class ModelDataSet[M: Model](BaseDataSet):
     """Data set for model data.
