@@ -476,7 +476,7 @@ def test_agent_dataset_dirty_flag():
         "wealth_cached",
         model.agents,
         fields="wealth",
-        use_dirty_flag=True, 
+        use_dirty_flag=True,
     )
 
     first = dataset.data
