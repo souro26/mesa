@@ -120,9 +120,9 @@ class AgentDataSet[A: Agent](BaseDataSet):
         self,
         name: str,
         agents: AbstractAgentSet[A],
-        fields: str | list[str] | None = None,
         *,
         use_dirty_flag: bool = False,
+        fields: str | list[str] | None = None,
     ):
         """Init. of AgentDataSet."""
         if fields is None:
@@ -142,20 +142,17 @@ class AgentDataSet[A: Agent](BaseDataSet):
     def data(self) -> list[dict[str, Any]]:
         """Return the data of the dataset."""
         self._check_closed()
-
-        # Default behavior: always recompute (backward compatible)
-        if not self._use_dirty_flag:
-            return [
+        
+        if (not self._use_dirty_flag) or self._is_dirty or self._cache is None:
+            snapshot = [
                 dict(zip(self._attributes, self._collector(agent)))
                 for agent in self.agents
             ]
 
-        # Dirty-flag caching behavior (opt-in)
-        if self._is_dirty or self._cache is None:
-            self._cache = [
-                dict(zip(self._attributes, self._collector(agent)))
-                for agent in self.agents
-            ]
+            if not self._use_dirty_flag:
+                return snapshot
+
+            self._cache = snapshot
             self._is_dirty = False
 
         return self._cache
@@ -176,7 +173,6 @@ class AgentDataSet[A: Agent](BaseDataSet):
         super().close()
         self.agents = None
         self._cache = None
-
 
 class ModelDataSet[M: Model](BaseDataSet):
     """Data set for model data.
