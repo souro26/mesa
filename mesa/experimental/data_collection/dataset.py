@@ -142,7 +142,7 @@ class AgentDataSet[A: Agent](BaseDataSet):
     def data(self) -> list[dict[str, Any]]:
         """Return the data of the dataset."""
         self._check_closed()
-        
+
         if (not self._use_dirty_flag) or self._is_dirty or self._cache is None:
             snapshot = [
                 dict(zip(self._attributes, self._collector(agent)))
@@ -173,6 +173,7 @@ class AgentDataSet[A: Agent](BaseDataSet):
         super().close()
         self.agents = None
         self._cache = None
+
 
 class ModelDataSet[M: Model](BaseDataSet):
     """Data set for model data.
