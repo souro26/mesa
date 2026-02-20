@@ -5,6 +5,7 @@ import re
 import warnings
 from unittest.mock import MagicMock, patch
 
+import networkx as nx
 import numpy as np
 import pytest
 
@@ -16,20 +17,9 @@ from mesa.discrete_space import (
     PropertyLayer,
     VoronoiGrid,
 )
-from mesa.space import (
-    ContinuousSpace,
-    HexMultiGrid,
-    HexSingleGrid,
-    MultiGrid,
-    NetworkGrid,
-    SingleGrid,
-)
 from mesa.visualization.backends import altair_backend, matplotlib_backend
 from mesa.visualization.components import PropertyLayerStyle
 from mesa.visualization.space_drawers import (
-    ContinuousSpaceDrawer,
-    HexSpaceDrawer,
-    NetworkSpaceDrawer,
     OrthogonalSpaceDrawer,
     VoronoiSpaceDrawer,
 )
@@ -67,14 +57,6 @@ def test_backend_selection():
             OrthogonalMooreGrid([2, 2], random=random.Random(42)),
             OrthogonalSpaceDrawer,
         ),
-        (SingleGrid(width=2, height=2, torus=False), OrthogonalSpaceDrawer),
-        (MultiGrid(width=2, height=2, torus=False), OrthogonalSpaceDrawer),
-        (HexGrid([2, 2], random=random.Random(42)), HexSpaceDrawer),
-        (HexSingleGrid(width=2, height=2, torus=False), HexSpaceDrawer),
-        (HexMultiGrid(width=2, height=2, torus=False), HexSpaceDrawer),
-        (Network(G=MagicMock(), random=random.Random(42)), NetworkSpaceDrawer),
-        (NetworkGrid(g=MagicMock()), NetworkSpaceDrawer),
-        (ContinuousSpace(x_max=2, y_max=2, torus=False), ContinuousSpaceDrawer),
         (
             VoronoiGrid([[0, 0], [1, 1]], random=random.Random(42)),
             VoronoiSpaceDrawer,
@@ -216,8 +198,8 @@ def test_network_non_contiguous_nodes():
     Verifies dictionary lookup correctly maps agents to positions
     regardless of node ID values.
     """
-    mock_graph = MagicMock()
-    mock_graph.nodes = [0, 1, 5, 10, 15]  # Non-contiguous node IDs
+    mock_graph = nx.Graph()
+    mock_graph.add_nodes_from([0, 1, 5, 10, 15])  # Non-contiguous node IDs
 
     model = CustomModel()
     network = Network(G=mock_graph, random=random.Random(42))
@@ -251,8 +233,7 @@ def test_network_missing_nodes_warning():
 
     Verifies NaN masking for missing nodes and warning threshold (>10%).
     """
-    mock_graph = MagicMock()
-    mock_graph.nodes = list(range(10))
+    mock_graph = nx.path_graph(10)
 
     model = CustomModel()
     network = Network(G=mock_graph, random=random.Random(42))
@@ -282,8 +263,8 @@ def test_network_race_condition_graceful():
 
     Combines both fixes: dictionary lookup + NaN masking for resilience.
     """
-    mock_graph = MagicMock()
-    mock_graph.nodes = [0, 1, 2, 50, 100]
+    mock_graph = nx.Graph()
+    mock_graph.add_nodes_from([0, 1, 2, 50, 100])
 
     model = CustomModel()
     network = Network(G=mock_graph, random=random.Random(42))

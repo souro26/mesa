@@ -7,15 +7,13 @@ Core Objects: Model
 from __future__ import annotations
 
 import random
-import sys
 import warnings
-from collections.abc import Sequence
-
-# mypy
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from mesa.experimental.data_collection.dataset import DataRegistry
 from mesa.experimental.mesa_signals import (
     HasObservables,
     ModelSignals,
@@ -26,10 +24,17 @@ from mesa.experimental.mesa_signals import (
 if TYPE_CHECKING:
     from mesa.experimental.devs import Simulator
 
-from mesa.agent import Agent, _HardKeyAgentSet
-from mesa.experimental.devs.eventlist import EventList, Priority, SimulationEvent
+from mesa.agent import Agent
+from mesa.agentset import _HardKeyAgentSet
 from mesa.experimental.scenarios import Scenario
 from mesa.mesa_logging import create_module_logger, method_logger
+from mesa.time import (
+    Event,
+    EventGenerator,
+    EventList,
+    Priority,
+    Schedule,
+)
 
 SeedLike = int | np.integer | Sequence[int] | np.random.SeedSequence
 RNGLike = np.random.Generator | np.random.BitGenerator
@@ -86,7 +91,6 @@ class Model[A: Agent, S: Scenario](HasObservables):
     def __init__(
         self,
         *args: Any,
-        seed: float | None = None,
         rng: RNGLike | SeedLike | None = None,
         scenario: S | None = None,
         **kwargs: Any,
@@ -98,10 +102,11 @@ class Model[A: Agent, S: Scenario](HasObservables):
 
         Args:
             args: arguments to pass onto super
-            seed: the seed for the random number generator
             rng: Pseudorandom number generator state. When `rng` is None, a new `numpy.random.Generator` is created
                   using entropy from the operating system. Types other than `numpy.random.Generator` are passed to
-                  `numpy.random.default_rng` to instantiate a `Generator`.
+                  `numpy.random.default_rng` to instantiate a `Generator`. `rng` is also used to try to seed a
+                  `random.Random` instance, if this fails, a random integer will be generated using the seeded
+                  numpy random number generator with which to seed `random.Random`.
             scenario: the scenario specifying the computational experiment to run
             kwargs: keyword arguments to pass onto super
 
@@ -111,15 +116,21 @@ class Model[A: Agent, S: Scenario](HasObservables):
         """
         super().__init__(*args, **kwargs)
         self.running: bool = True
-        self.steps: int = 0
+        self.time: float = 0.0
         self.time: float = 0.0
         self.agent_id_counter: int = 1
+        self.rng = None
+        self._rng = None
+        self.random = None
+        self._seed = None
 
         # Track if a simulator is controlling time
         self._simulator: Simulator | None = None
 
         # Event list for event-based execution
         self._event_list: EventList = EventList()
+        # Strong references to active EventGenerators (prevent GC)
+        self._event_generators: set[EventGenerator] = set()
 
         # check if `scenario` is provided
         # and if so, whether rng is the same or not
@@ -129,48 +140,23 @@ class Model[A: Agent, S: Scenario](HasObservables):
             else:
                 rng = scenario.rng
 
-        if (seed is not None) and (rng is not None):
-            raise ValueError("you have to pass either rng or seed, not both")
-        elif seed is None:
-            self.rng: np.random.Generator = np.random.default_rng(rng)
-            self._rng = (
-                self.rng.bit_generator.state
-            )  # this allows for reproducing the rng
-
-            # If rng is an integer, use it directly.
-            # Otherwise (None, Generator, etc.), generate a new integer seed.
-            if isinstance(rng, (int, np.integer)):
-                seed = rng
-                self.random = random.Random(seed)
-            else:
-                seed = int(self.rng.integers(np.iinfo(np.int32).max))
-                self.random = random.Random(seed)
-            self._seed = seed  # this allows for reproducing stdlib.random
-        elif rng is None:
-            warnings.warn(
-                "The use of the `seed` keyword argument is deprecated, use `rng` instead. No functional changes.",
-                FutureWarning,
-                stacklevel=2,
-            )
-
-            self.random = random.Random(seed)
-            self._seed = seed  # this allows for reproducing stdlib.random
-
-            try:
-                self.rng: np.random.Generator = np.random.default_rng(seed)
-            except TypeError:
-                rng = self.random.randint(0, sys.maxsize)
-                self.rng: np.random.Generator = np.random.default_rng(rng)
-            self._rng = self.rng.bit_generator.state
+        self.reset_rng(rng)
 
         # now that we have figured out the seed value for rng
         # we can set create a scenario with this if needed
         if scenario is None:
-            scenario = Scenario(rng=seed)  # type: ignore[assignment]
+            scenario = Scenario(rng=rng)  # type: ignore[assignment]
         self.scenario = scenario
 
-        # Wrap the user-defined step method
+        # Store user's step method and create the default step schedule.
+        # Uses EventGenerator to schedule _do_step every 1.0 time units.
         self._user_step = self.step
+        self._default_schedule: EventGenerator = EventGenerator(
+            self,
+            self._user_step,
+            Schedule(interval=1.0, start=1.0),
+            priority=Priority.HIGH,
+        ).start()
         self.step = self._wrapped_step
 
         # setup agent registration data structures
@@ -181,11 +167,10 @@ class Model[A: Agent, S: Scenario](HasObservables):
             [], random=self.random
         )  # an agenset with all agents
 
-    def _wrapped_step(self, *args: Any, **kwargs: Any) -> None:
+        self.data_registry = DataRegistry()
+
+    def _wrapped_step(self) -> None:
         """Advance time by one unit, processing any scheduled events."""
-        # Schedule step event if not already scheduled (first call or no simulator)
-        if self._event_list.is_empty():
-            self._schedule_step(self.time + 1)
         self._advance_time(self.time + 1)
 
     def _advance_time(self, until: float) -> None:
@@ -195,6 +180,14 @@ class Model[A: Agent, S: Scenario](HasObservables):
             until: The time to advance to
 
         """
+        if until <= self.time:
+            warnings.warn(
+                f"end time {until} is larger than time {self.time}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+            return
         while True:
             try:
                 event = self._event_list.pop_event()
@@ -209,18 +202,6 @@ class Model[A: Agent, S: Scenario](HasObservables):
                 break
 
         self.time = until
-
-    def _schedule_step(self, time: float) -> None:
-        """Schedule a step event at the given time."""
-        event = SimulationEvent(time, self._do_step, priority=Priority.HIGH)
-        self._event_list.add_event(event)
-
-    def _do_step(self) -> None:
-        """Execute one step and schedule the next."""
-        self.steps += 1
-        _mesa_logger.info(f"Step {self.steps} at time {self.time}")
-        self._user_step()
-        self._schedule_step(self.time + 1)
 
     @property
     def agents(self) -> _HardKeyAgentSet[A]:
@@ -343,38 +324,38 @@ class Model[A: Agent, S: Scenario](HasObservables):
     def step(self) -> None:
         """A single step. Fill in here."""
 
-    def reset_randomizer(self, seed: int | None = None) -> None:
-        """Reset the model random number generator.
-
-        Args:
-            seed: A new seed for the RNG; if None, reset using the current seed
-        """
-        warnings.warn(
-            "The use of the `seed` keyword argument is deprecated, use `rng` instead. No functional changes.",
-            FutureWarning,
-            stacklevel=2,
-        )
-
-        if seed is None:
-            seed = self._seed
-        self.random.seed(seed)
-        self._seed = seed
-
     def reset_rng(self, rng: RNGLike | SeedLike | None = None) -> None:
         """Reset the model random number generator.
 
         Args:
             rng: A new seed for the RNG; if None, reset using the current seed
         """
+        failed = True
         if rng is None:
             # Restore from saved initial state
-            bg_class = getattr(np.random, self._rng["bit_generator"])
-            bg = bg_class()
-            bg.state = self._rng
-            self.rng = np.random.Generator(bg)
+            try:
+                bg_class = getattr(np.random, self._rng["bit_generator"])
+            except TypeError:
+                rng = None
+            else:
+                failed = False
+                bg = bg_class()
+                bg.state = self._rng
+                self.rng = np.random.Generator(bg)
+
+        if failed:
+            self.rng: np.random.Generator = np.random.default_rng(rng)
+
+        self._rng = self.rng.bit_generator.state  # this allows for reproducing the rng
+
+        try:
+            self.random = random.Random(rng)
+        except TypeError:
+            seed = int(self.rng.integers(np.iinfo(np.int32).max))
+            self.random = random.Random(seed)
         else:
-            self.rng = np.random.default_rng(rng)
-            self._rng = self.rng.bit_generator.state
+            seed = rng
+        self._seed = seed  # this allows for reproducing stdlib.random
 
     def remove_all_agents(self):
         """Remove all agents from the model.
@@ -388,3 +369,98 @@ class Model[A: Agent, S: Scenario](HasObservables):
         # we need to wrap keys in a list to avoid a RunTimeError: dictionary changed size during iteration
         for agent in list(self._all_agents):
             agent.remove()
+
+        self.data_registry.close()  # this is needed to ensure GC works properly
+
+    ### Event scheduling and time progression methods ###
+    def schedule_event(
+        self,
+        function: Callable,
+        *,
+        at: float | None = None,
+        after: float | None = None,
+        priority: Priority = Priority.DEFAULT,
+    ) -> Event:
+        """Schedule a one-off event.
+
+        Args:
+            function: The callable to execute
+            at: Absolute time to execute (mutually exclusive with after)
+            after: Relative time from now to execute (mutually exclusive with at)
+            priority: Priority level for the event
+
+        Returns:
+            The scheduled Event (can be used to cancel)
+
+        Raises:
+            ValueError: If both or neither of at/after are specified
+            ValueError: If both or neither of at/after are specified, or if the scheduled time is in the past.
+        """
+        if (at is None) == (after is None):
+            raise ValueError("Specify exactly one of 'at' or 'after'")
+
+        time = at if at is not None else self.time + after
+        # Enforce monotonic time progression
+        if time < self.time:
+            raise ValueError(
+                f"Cannot schedule event in the past. "
+                f"Scheduled time is {time}, but current time is {self.time}"
+            )
+        event = Event(time, function, priority=priority)
+        self._event_list.add_event(event)
+        return event
+
+    def schedule_recurring(
+        self,
+        function: Callable,
+        schedule: Schedule,
+        priority: Priority = Priority.DEFAULT,
+    ) -> EventGenerator:
+        """Schedule a recurring event based on a Schedule.
+
+        Args:
+            function: The callable to execute repeatedly
+            schedule: The Schedule defining when events occur
+            priority: Priority level for generated events
+
+        Returns:
+            The EventGenerator (can be used to stop)
+
+        Raises:
+            ValueError: If the schedule start time is in the past.
+        """
+        if schedule.start is not None and schedule.start < self.time:
+            raise ValueError(
+                f"Cannot start recurring schedule in the past. "
+                f"Start time is {schedule.start}, current time is {self.time}"
+            )
+        generator = EventGenerator(self, function, schedule, priority)
+        generator.start()
+        return generator
+
+    def run_for(self, duration: float | int) -> None:
+        """Run the model for the specified duration.
+
+        Args:
+            duration: Time units to advance
+        """
+        self._advance_time(self.time + duration)
+
+    def run_until(self, end_time: float | int) -> None:
+        """Run the model until the specified time.
+
+        Args:
+            end_time: Absolute time to run until
+
+        If model.time is larger than end_time, the method returns directly.
+
+        """
+        if self.time > end_time:
+            warnings.warn(
+                f"end_time {end_time} is larger than time {self.time}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return
+
+        self._advance_time(end_time)
