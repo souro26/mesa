@@ -314,23 +314,15 @@ def test_eventlist():
     event_list.clear()
     assert len(event_list) == 0
 
-
 def test_eventlist_fifo_same_time_same_priority_execution():
     """Events with identical time and priority execute in insertion order."""
     event_list = EventList()
     execution_order = []
-    functions = []  # keep strong references
 
     for i in range(10):
+        def fn(i=i):
+            execution_order.append(i)
 
-        def make_fn(i=i):
-            def fn():
-                execution_order.append(i)
-
-            return fn
-
-        fn = make_fn()
-        functions.append(fn)  # prevent GC
         event_list.add_event(Event(5, fn, priority=Priority.DEFAULT))
 
     while not event_list.is_empty():
@@ -351,9 +343,6 @@ def test_eventlist_recursive_same_timestamp_execution():
         execution_trace.append("A")
         event_list.add_event(Event(5, event_b, priority=Priority.DEFAULT))
 
-    # keep strong references
-    functions = [event_a, event_b]
-
     event_list.add_event(Event(5, event_a, priority=Priority.DEFAULT))
 
     while not event_list.is_empty():
@@ -361,24 +350,16 @@ def test_eventlist_recursive_same_timestamp_execution():
 
     assert execution_trace == ["A", "B"]
 
-
 def test_eventlist_execution_skips_canceled_events():
     """Canceled events are never executed."""
     event_list = EventList()
     execution = []
-    functions = []  # keep strong references
 
     events = []
     for i in range(10):
+        def fn(i=i):
+            execution.append(i)
 
-        def make_fn(i=i):
-            def fn():
-                execution.append(i)
-
-            return fn
-
-        fn = make_fn()
-        functions.append(fn)  # prevent GC
         e = Event(5, fn, priority=Priority.DEFAULT)
         events.append(e)
         event_list.add_event(e)
@@ -391,7 +372,6 @@ def test_eventlist_execution_skips_canceled_events():
         event_list.pop_event().execute()
 
     assert execution == list(range(5, 10))
-
 
 @pytest.fixture
 def setup():
