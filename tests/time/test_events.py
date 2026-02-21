@@ -314,10 +314,10 @@ def test_eventlist():
     event_list = EventList()
     some_test_function = MagicMock()
 
-    N = 1000
+    n = 1000
 
     events = []
-    for i in range(N):
+    for i in range(n):
         event = Event(
             i,
             some_test_function,
@@ -329,7 +329,7 @@ def test_eventlist():
         event_list.add_event(event)
 
     # Cancel 90% of events
-    for e in events[: int(0.9 * N)]:
+    for e in events[: int(0.9 * n)]:
         event_list.remove(e)
 
     # Only remaining events should execute in correct order
@@ -340,8 +340,40 @@ def test_eventlist():
         remaining_times.append(ev.time)
 
     # Expected times are the last 10%
-    expected_times = list(range(int(0.9 * N), N))
+    expected_times = list(range(int(0.9 * n), n))
     assert remaining_times == expected_times
+    
+    # compaction branch should execute when canceled events dominate
+    event_list = EventList()
+    some_test_function = MagicMock()
+
+    # Add 10 events
+    events = []
+    for i in range(10):
+        e = Event(
+            i,
+            some_test_function,
+            priority=Priority.DEFAULT,
+            function_args=[],
+            function_kwargs={},
+        )
+        events.append(e)
+        event_list.add_event(e)
+
+    # Cancel 6 (more than half)
+    for e in events[:6]:
+        event_list.remove(e)
+
+    # First pop should trigger compaction internally
+    first = event_list.pop_event()
+    assert first.time == 6
+
+    # Remaining pops should work normally
+    remaining = []
+    while not event_list.is_empty():
+        remaining.append(event_list.pop_event().time)
+
+    assert remaining == [7, 8, 9]
     
     # clear
     event_list.clear()
